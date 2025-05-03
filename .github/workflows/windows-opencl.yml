@@ -1,0 +1,46 @@
+name: windows-opencl
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    # 1 ─ Checkout fork
+    - uses: actions/checkout@v4
+
+    # 2 ─ Set up MSYS2 with all deps
+    - uses: msys2/setup-msys2@v2
+      with:
+        update: true
+        install: >-
+          git
+          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-clang
+          mingw-w64-x86_64-opencl-icd
+          mingw-w64-x86_64-opencl-headers
+          nasm
+          pkg-config
+
+    # 3 ─ Configure & compile FFmpeg (≈6‑8 min on GitHub runner)
+    - name: Build FFmpeg GoPro fork
+      shell: msys2 {0}
+      run: |
+        ./configure \
+          --enable-opencl \
+          --enable-gpl \
+          --enable-libx264 \
+          --disable-w32threads \
+          --disable-debug
+        make -j$(nproc)
+        strip ffmpeg.exe ffprobe.exe
+
+    # 4 ─ Upload artefact
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ffmpeg-win64-opencl
+        path: |
+          ffmpeg.exe
+          ffprobe.exe
