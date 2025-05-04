@@ -11,7 +11,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # ---------- MSYS2 ----------
+    # ---------- MSYS2 toolchain ----------
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -34,4 +34,61 @@ jobs:
         git clone --depth 1 https://code.videolan.org/videolan/x264.git
         cd x264
         ./configure --enable-static --disable-opencl --prefix=/mingw64
-        make -j"$(nproc)
+        make -j$(nproc)           # ← quotes removed
+        make install
+        cd ..
+
+    # ---------- build FFmpeg ----------
+    - name: Build FFmpeg (GoPro fork)
+      shell: msys2 {0}
+      run: |
+        set -e
+        git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
+        cd goproMax-ffmpeg-v5
+        ./configure \
+          --cc=gcc \
+          --target-os=mingw32 --arch=x86_64 \
+          --enable-cross-compile \
+          --enable-gpl --enable-nonfree \
+          --enable-opencl \
+          --enable-libx264 \
+          --disable-asm \
+          --disable-doc
+        make -j$(nproc)           # ← quotes removed
+
+        # executables
+        cp ffmpeg.exe ffprobe.exe "$GITHUB_WORKSPACE"
+
+        # runtime DLLs
+        cp /mingw64/bin/libbz2-1.dll        "$GITHUB_WORKSPACE"
+        cp /mingw64/bin/liblzma-5.dll       "$GITHUB_WORKSPACE"
+        cp /mingw64/bin/libiconv-2.dll      "$GITHUB_WORKSPACE"
+        cp /mingw64/bin/libwinpthread-1.dll "$GITHUB_WORKSPACE"
+        cp /mingw64/bin/libgcc_s_seh-1.dll  "$GITHUB_WORKSPACE"
+        cp /mingw64/bin/libstdc++-6.dll     "$GITHUB_WORKSPACE"
+        cp /mingw64/bin/zlib1.dll           "$GITHUB_WORKSPACE"
+
+        # OpenCL loader (name varies by repo version)
+        if [ -f /mingw64/bin/OpenCL.dll ]; then
+            cp /mingw64/bin/OpenCL.dll "$GITHUB_WORKSPACE"
+        elif [ -f /mingw64/bin/libOpenCL.dll ]; then
+            cp /mingw64/bin/libOpenCL.dll "$GITHUB_WORKSPACE"
+        fi
+
+    # ---------- upload everything ----------
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gopro-max-ffmpeg-windows
+        path: |
+          ffmpeg.exe
+          ffprobe.exe
+          libbz2-1.dll
+          liblzma-5.dll
+          libiconv-2.dll
+          libwinpthread-1.dll
+          libgcc_s_seh-1.dll
+          libstdc++-6.dll
+          zlib1.dll
+          OpenCL.dll?
+          libOpenCL.dll?
