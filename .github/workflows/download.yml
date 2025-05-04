@@ -1,4 +1,4 @@
-name: Build GoPro‑MAX FFmpeg – Windows
+name: Build GoPro‑MAX FFmpeg – Windows
 
 on:
   workflow_dispatch:
@@ -51,8 +51,7 @@ jobs:
           --enable-cross-compile \
           --enable-gpl --enable-nonfree \
           --enable-opencl \
-          --enable-libx264 \
-          --disable-werror
+          --enable-libx264
         make -j"$(nproc)"
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
