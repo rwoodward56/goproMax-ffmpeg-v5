@@ -1,79 +1,57 @@
-name: Build GoPro‑MAX FFmpeg
+name: Build GoPro‑MAX FFmpeg (Windows)
 
+# Manually trigger from the “Actions → Run workflow” button.
 on:
-  workflow_dispatch:           # ✋ manual “Run workflow” button
-  push:                        # or auto‑run on every push to main
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  linux:
-    name: Linux (Ubuntu) build
-    runs-on: ubuntu-latest
+  windows:
+    name: Windows‑x64 build
+    runs-on: windows-latest
 
     steps:
+    # 1 — Check out *your* repository (doesn't need any code inside).
     - uses: actions/checkout@v4
 
-    # Build the Docker image that turns GoPro source into fresh FFmpeg binaries
-    - name: Build via Dockerfile
-      run: docker build -t goproffmpeg:latest .
+    # 2 — Spin up MSYS2 and install every tool FFmpeg needs, including x264.
+    - name: Install MSYS2 + toolchain + x264
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          git
+          base-devel
+          mingw-w64-x86_64-toolchain
+          mingw-w64-x86_64-yasm
+          mingw-w64-x86_64-nasm
+          mingw-w64-x86_64-clang
+          mingw-w64-x86_64-opencl-headers
+          mingw-w64-x86_64-x264   # ← the missing spicy salsa
 
-    # Spin up a throw‑away container & copy the goodies out
-    - name: Copy artifacts from container
+    # 3 — Clone the GoPro fork and build FFmpeg with the OpenCL filter + x264.
+    - name: Build FFmpeg with GoPro filter
+      shell: msys2 {0}
       run: |
-        cid=$(docker create goproffmpeg:latest)
-        docker cp $cid:/ffmpeg               ./ffmpeg-linux
-        docker cp $cid:/ffprobe              ./ffprobe-linux
-        docker cp $cid:/gopromax_opencl.ptx  ./gopromax_opencl.ptx
-        docker rm $cid
+        set -e
+        git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
+        cd goproMax-ffmpeg-v5
+        ./configure \
+          --target-os=mingw32 --arch=x86_64 \
+          --enable-cross-compile \
+          --enable-gpl --enable-nonfree \
+          --enable-opencl \
+          --enable-libx264
+        make -j"$(nproc)"
+        # copy the three goodies to the GitHub workspace root for upload
+        cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
-    - name: Upload Linux artifacts
+    # 4 — Upload the finished binaries so you can download them from the UI.
+    - name: Upload Windows artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ffmpeg-linux
+        name: gopro-max-ffmpeg-windows
         path: |
-          ffmpeg-linux
-          ffprobe-linux
+          ffmpeg.exe
+          ffprobe.exe
           gopromax_opencl.ptx
-
-  windows:
-  name: Windows (.exe) build
-  runs-on: windows-latest
-  steps:
-  - uses: actions/checkout@v4
-
-  - name: MSYS2 setup w/ x264
-    uses: msys2/setup-msys2@v2
-    with:
-      msystem: MINGW64
-      update: true
-      install: >-
-        git
-        base-devel
-        mingw-w64-x86_64-toolchain
-        mingw-w64-x86_64-yasm
-        mingw-w64-x86_64-nasm
-        mingw-w64-x86_64-clang
-        mingw-w64-x86_64-opencl-headers
-        mingw-w64-x86_64-x264          # <‑‑‑ the missing salsa!
-
-  - name: Build FFmpeg w/ GoPro filter + x264
-    shell: msys2 {0}
-    run: |
-      git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
-      cd goproMax-ffmpeg-v5
-      ./configure \
-        --target-os=mingw32 --arch=x86_64 \
-        --enable-cross-compile \
-        --enable-gpl --enable-nonfree \
-        --enable-opencl \
-        --enable-libx264
-      make -j$(nproc)
-
-  - name: Upload Windows artifacts
-    uses: actions/upload-artifact@v4
-    with:
-      name: ffmpeg-windows
-      path: |
-        goproMax-ffmpeg-v5/ffmpeg.exe
-        goproMax-ffmpeg-v5/ffprobe.exe
-        goproMax-ffmpeg-v5/libavfilter/opencl/gopromax_opencl.ptx
