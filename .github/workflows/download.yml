@@ -52,7 +52,8 @@ jobs:
           --enable-gpl --enable-nonfree \
           --enable-opencl \
           --enable-libx264 \
-          --disable-asm
+          --disable-asm \
+          --disable-doc 
         make -j"$(nproc)"
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
