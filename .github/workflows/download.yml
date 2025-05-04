@@ -9,10 +9,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    # 1) Pull (even empty) repo so Actions has a working dir
+    # 1 – check out (even empty) repo
     - uses: actions/checkout@v4
 
-    # 2) MSYS2 toolchain + OpenCL **headers AND runtime loader**
+    # 2 – MSYS2 toolchain + OpenCL headers **and the ICD loader**
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -26,9 +26,9 @@ jobs:
           mingw-w64-x86_64-nasm
           mingw-w64-x86_64-clang
           mingw-w64-x86_64-opencl-headers
-          mingw-w64-x86_64-ocl-icd          # ← OpenCL runtime (fixes “opencl not found”)
+          mingw-w64-x86_64-opencl-icd      # ← runtime loader (libOpenCL.dll)
 
-    # 3) Build static x264 (one‑time; tiny overhead)
+    # 3 – build static x264
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -40,7 +40,7 @@ jobs:
         make install
         cd ..
 
-    # 4) Build FFmpeg with GoPro filter, OpenCL, x264
+    # 4 – build FFmpeg (GoPro fork) with OpenCL + libx264
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -54,10 +54,11 @@ jobs:
           --enable-opencl \
           --enable-libx264
         make -j"$(nproc)"
-        # copy artifacts for upload
+
+        # stash artifacts for upload
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
-    # 5) Upload the three binaries
+    # 5 – upload the three binaries
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
