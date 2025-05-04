@@ -9,9 +9,9 @@ jobs:
     name: Windows‑x64 build
 
     steps:
-    - uses: actions/checkout@v4          # workspace
+    - uses: actions/checkout@v4
 
-    # 1 – MSYS2 with GCC + OpenCL
+    # ---------- MSYS2 + toolchain ----------
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -26,7 +26,7 @@ jobs:
           mingw-w64-x86_64-opencl-headers
           mingw-w64-x86_64-opencl-icd
 
-    # 2 – build static x264
+    # ---------- build static x264 ----------
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -38,7 +38,7 @@ jobs:
         make install
         cd ..
 
-    # 3 – build FFmpeg fork (OpenCL + x264) using GCC
+    # ---------- build FFmpeg (GoPro fork) ----------
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -51,12 +51,12 @@ jobs:
           --enable-cross-compile \
           --enable-gpl --enable-nonfree \
           --enable-opencl \
-          --enable-libx264
+          --enable-libx264 \
           --disable-asm
         make -j"$(nproc)"
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
-    # 4 – upload finished binaries
+    # ---------- upload artifacts ----------
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
