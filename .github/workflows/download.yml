@@ -1,20 +1,19 @@
-name: Build GoPro‑MAX FFmpeg (Windows)
+name: Build GoPro‑MAX FFmpeg – Windows
 
-# Manually trigger from the “Actions → Run workflow” button.
 on:
-  workflow_dispatch:
+  workflow_dispatch:        # manual “Run workflow” button
 
 jobs:
-  windows:
+  win-x64:
     name: Windows‑x64 build
     runs-on: windows-latest
 
     steps:
-    # 1 — Check out *your* repository (doesn't need any code inside).
+    # 1) Check out your repo (it can even be empty).
     - uses: actions/checkout@v4
 
-    # 2 — Spin up MSYS2 and install every tool FFmpeg needs, including x264.
-    - name: Install MSYS2 + toolchain + x264
+    # 2) Spin up MSYS2 with all the base tools we need.
+    - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
@@ -27,10 +26,21 @@ jobs:
           mingw-w64-x86_64-nasm
           mingw-w64-x86_64-clang
           mingw-w64-x86_64-opencl-headers
-          mingw-w64-x86_64-x264   # ← the missing spicy salsa
 
-    # 3 — Clone the GoPro fork and build FFmpeg with the OpenCL filter + x264.
-    - name: Build FFmpeg with GoPro filter
+    # 3) Build a static x264 *inside* MSYS2 (keeps everything GPL‑compatible).
+    - name: Build static x264
+      shell: msys2 {0}
+      run: |
+        set -e
+        git clone --depth 1 https://code.videolan.org/videolan/x264.git
+        cd x264
+        ./configure --enable-static --disable-opencl --prefix=/mingw64
+        make -j"$(nproc)"
+        make install
+        cd ..
+
+    # 4) Clone the GoPro fork and build FFmpeg with the OpenCL filter + x264.
+    - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
         set -e
@@ -43,11 +53,12 @@ jobs:
           --enable-opencl \
           --enable-libx264
         make -j"$(nproc)"
-        # copy the three goodies to the GitHub workspace root for upload
+
+        # copy the goodies to the workflow root for easy upload
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
-    # 4 — Upload the finished binaries so you can download them from the UI.
-    - name: Upload Windows artifacts
+    # 5) Publish the three binaries as an artifact you can download.
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: gopro-max-ffmpeg-windows
