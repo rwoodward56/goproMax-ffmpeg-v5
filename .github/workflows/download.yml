@@ -1,18 +1,16 @@
 name: Build GoPro‑MAX FFmpeg – Windows
 
 on:
-  workflow_dispatch:          # click “Run workflow” whenever you need fresh EXEs
+  workflow_dispatch:
 
 jobs:
   win-x64:
-    name: Windows‑x64 build
     runs-on: windows-latest
+    name: Windows‑x64 build
 
     steps:
-    # 1) grab (even empty) repo so GH‑Actions has a workspace
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4            # workspace
 
-    # 2) MSYS2 with compiler, OpenCL headers *and* runtime loader
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -26,9 +24,8 @@ jobs:
           mingw-w64-x86_64-nasm
           mingw-w64-x86_64-clang
           mingw-w64-x86_64-opencl-headers
-          mingw-w64-x86_64-opencl-icd        # libOpenCL.dll / import library
+          mingw-w64-x86_64-opencl-icd
 
-    # 3) build a static x264 once (tiny, fast)
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -40,7 +37,6 @@ jobs:
         make install
         cd ..
 
-    # 4) build the GoPro‑MAX FFmpeg fork with OpenCL + libx264
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -54,5 +50,13 @@ jobs:
           --enable-opencl \
           --enable-libx264
         make -j"$(nproc)"
-        # park the three binaries in the workspace root
-        cp ffmpeg.exe ffprobe.exe libavfi
+        cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gopro-max-ffmpeg-windows
+        path: |
+          ffmpeg.exe
+          ffprobe.exe
+          gopromax_opencl.ptx
