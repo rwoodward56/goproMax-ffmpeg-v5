@@ -1,7 +1,7 @@
 name: Build GoPro‑MAX FFmpeg – Windows
 
 on:
-  workflow_dispatch:        # manual “Run workflow” button
+  workflow_dispatch:          # manual “Run workflow” button
 
 jobs:
   win-x64:
@@ -9,10 +9,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    # 1) Check out your repo (it can even be empty).
+    # 1) Pull (even empty) repo so Actions has a working dir
     - uses: actions/checkout@v4
 
-    # 2) Spin up MSYS2 with all the base tools we need.
+    # 2) MSYS2 toolchain + OpenCL **headers AND runtime loader**
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -26,8 +26,9 @@ jobs:
           mingw-w64-x86_64-nasm
           mingw-w64-x86_64-clang
           mingw-w64-x86_64-opencl-headers
+          mingw-w64-x86_64-ocl-icd          # ← OpenCL runtime (fixes “opencl not found”)
 
-    # 3) Build a static x264 *inside* MSYS2 (keeps everything GPL‑compatible).
+    # 3) Build static x264 (one‑time; tiny overhead)
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -39,7 +40,7 @@ jobs:
         make install
         cd ..
 
-    # 4) Clone the GoPro fork and build FFmpeg with the OpenCL filter + x264.
+    # 4) Build FFmpeg with GoPro filter, OpenCL, x264
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -53,11 +54,10 @@ jobs:
           --enable-opencl \
           --enable-libx264
         make -j"$(nproc)"
-
-        # copy the goodies to the workflow root for easy upload
+        # copy artifacts for upload
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
-    # 5) Publish the three binaries as an artifact you can download.
+    # 5) Upload the three binaries
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
