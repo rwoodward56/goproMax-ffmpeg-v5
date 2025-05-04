@@ -36,76 +36,44 @@ jobs:
           gopromax_opencl.ptx
 
   windows:
-    name: Windows (.exe) build
-    runs-on: windows-latest
+  name: Windows (.exe) build
+  runs-on: windows-latest
+  steps:
+  - uses: actions/checkout@v4
 
-    steps:
-    - uses: actions/checkout@v4
+  - name: MSYS2 setup w/ x264
+    uses: msys2/setup-msys2@v2
+    with:
+      msystem: MINGW64
+      update: true
+      install: >-
+        git
+        base-devel
+        mingw-w64-x86_64-toolchain
+        mingw-w64-x86_64-yasm
+        mingw-w64-x86_64-nasm
+        mingw-w64-x86_64-clang
+        mingw-w64-x86_64-opencl-headers
+        mingw-w64-x86_64-x264          # <‑‑‑ the missing salsa!
 
-    # MSYS2 gives us a full mingw64 toolchain in one shot
-    - name: Install MSYS2 and toolchain
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: MINGW64
-        update: true
-        install: >-
-          base-devel
-          git
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-yasm
-          mingw-w64-x86_64-clang
-          mingw-w64-x86_64-opencl-headers
+  - name: Build FFmpeg w/ GoPro filter + x264
+    shell: msys2 {0}
+    run: |
+      git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
+      cd goproMax-ffmpeg-v5
+      ./configure \
+        --target-os=mingw32 --arch=x86_64 \
+        --enable-cross-compile \
+        --enable-gpl --enable-nonfree \
+        --enable-opencl \
+        --enable-libx264
+      make -j$(nproc)
 
-    - name: Build FFmpeg with GoPro filter (Windows)
-      shell: msys2 {0}
-      run: |
-        git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
-        cd goproMax-ffmpeg-v5
-        ./configure \
-          --target-os=mingw32 --arch=x86_64 \
-          --enable-cross-compile \
-          --enable-opencl --enable-gpl --enable-nonfree \
-          --enable-libx264
-        make -j$(nproc)
-
-    - name: Collect Windows artifacts
-      shell: bash
-      run: |
-        cp goproMax-ffmpeg-v5/ffmpeg.exe   .
-        cp goproMax-ffmpeg-v5/ffprobe.exe  .
-        cp goproMax-ffmpeg-v5/libavfilter/opencl/gopromax_opencl.ptx .
-    - name: Upload Windows artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ffmpeg-windows
-        path: |
-          ffmpeg.exe
-          ffprobe.exe
-          gopromax_opencl.ptx
-
-  # ---- optional: bundle both sets into a GitHub Release ----
-  release:
-    name: Draft GitHub Release
-    needs: [linux, windows]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: ./dist
-
-    - name: Zip them neatly
-      run: |
-        cd dist
-        zip -r linux-binaries.zip ffmpeg-linux ffprobe-linux gopromax_opencl.ptx
-        zip -r windows-binaries.zip ffmpeg.exe ffprobe.exe gopromax_opencl.ptx
-
-    - name: Create or update draft release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: goproffmpeg-${{ github.run_number }}
-        name: "GoPro‑MAX FFmpeg build #${{ github.run_number }}"
-        draft: true
-        files: |
-          dist/linux-binaries.zip
-          dist/windows-binaries.zip
+  - name: Upload Windows artifacts
+    uses: actions/upload-artifact@v4
+    with:
+      name: ffmpeg-windows
+      path: |
+        goproMax-ffmpeg-v5/ffmpeg.exe
+        goproMax-ffmpeg-v5/ffprobe.exe
+        goproMax-ffmpeg-v5/libavfilter/opencl/gopromax_opencl.ptx
