@@ -1,7 +1,7 @@
 name: Build GoPro‑MAX FFmpeg – Windows
 
 on:
-  workflow_dispatch:          # manual “Run workflow” button
+  workflow_dispatch:          # click “Run workflow” whenever you need fresh EXEs
 
 jobs:
   win-x64:
@@ -9,16 +9,16 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    # 1 – check out (even empty) repo
+    # 1) grab (even empty) repo so GH‑Actions has a workspace
     - uses: actions/checkout@v4
 
-    # 2 – MSYS2 toolchain + OpenCL headers **and the ICD loader**
+    # 2) MSYS2 with compiler, OpenCL headers *and* runtime loader
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
         update: true
-        install: >-
+        install: |
           git
           base-devel
           mingw-w64-x86_64-toolchain
@@ -26,9 +26,9 @@ jobs:
           mingw-w64-x86_64-nasm
           mingw-w64-x86_64-clang
           mingw-w64-x86_64-opencl-headers
-          mingw-w64-x86_64-opencl-icd      # ← runtime loader (libOpenCL.dll)
+          mingw-w64-x86_64-opencl-icd        # libOpenCL.dll / import library
 
-    # 3 – build static x264
+    # 3) build a static x264 once (tiny, fast)
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -40,7 +40,7 @@ jobs:
         make install
         cd ..
 
-    # 4 – build FFmpeg (GoPro fork) with OpenCL + libx264
+    # 4) build the GoPro‑MAX FFmpeg fork with OpenCL + libx264
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -54,16 +54,5 @@ jobs:
           --enable-opencl \
           --enable-libx264
         make -j"$(nproc)"
-
-        # stash artifacts for upload
-        cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
-
-    # 5 – upload the three binaries
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: gopro-max-ffmpeg-windows
-        path: |
-          ffmpeg.exe
-          ffprobe.exe
-          gopromax_opencl.ptx
+        # park the three binaries in the workspace root
+        cp ffmpeg.exe ffprobe.exe libavfi
