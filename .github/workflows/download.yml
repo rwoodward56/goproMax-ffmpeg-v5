@@ -1,7 +1,7 @@
 name: Build GoPro‑MAX FFmpeg – Windows
 
 on:
-  workflow_dispatch:          # click “Run workflow” whenever you need fresh binaries
+  workflow_dispatch:          # press “Run workflow” to refresh binaries
 
 jobs:
   win-x64:
@@ -9,10 +9,10 @@ jobs:
     name: Windows‑x64 build
 
     steps:
-    # 1 ─ workspace (repo can even be empty)
+    # 1 – workspace (repo can be empty)
     - uses: actions/checkout@v4
 
-    # 2 ─ MSYS2 + GCC toolchain + OpenCL loader/headers
+    # 2 – MSYS2 toolchain + OpenCL
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -27,7 +27,7 @@ jobs:
           mingw-w64-x86_64-opencl-headers
           mingw-w64-x86_64-opencl-icd
 
-    # 3 ─ build static x264
+    # 3 – build static x264
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -39,7 +39,7 @@ jobs:
         make install
         cd ..
 
-    # 4 ─ build FFmpeg fork (OpenCL + x264), no docs, no asm
+    # 4 – build FFmpeg fork (OpenCL + x264)
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -67,9 +67,15 @@ jobs:
         cp /mingw64/bin/libwinpthread-1.dll "$GITHUB_WORKSPACE"
         cp /mingw64/bin/libgcc_s_seh-1.dll  "$GITHUB_WORKSPACE"
         cp /mingw64/bin/libstdc++-6.dll     "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/libOpenCL.dll       "$GITHUB_WORKSPACE"
 
-    # 5 ─ upload everything
+        # copy whichever OpenCL loader exists
+        if [ -f /mingw64/bin/OpenCL.dll ]; then
+            cp /mingw64/bin/OpenCL.dll "$GITHUB_WORKSPACE"
+        elif [ -f /mingw64/bin/libOpenCL.dll ]; then
+            cp /mingw64/bin/libOpenCL.dll "$GITHUB_WORKSPACE"
+        fi
+
+    # 5 – upload everything
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -83,4 +89,5 @@ jobs:
           libwinpthread-1.dll
           libgcc_s_seh-1.dll
           libstdc++-6.dll
-          libOpenCL.dll
+          OpenCL.dll?
+          libOpenCL.dll?
