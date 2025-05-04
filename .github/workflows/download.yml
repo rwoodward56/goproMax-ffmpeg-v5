@@ -1,4 +1,4 @@
-name: Build GoPro‑MAX FFmpeg – Windows
+name: Build GoPro‑MAX FFmpeg – Windows
 
 on:
   workflow_dispatch:
@@ -9,9 +9,9 @@ jobs:
     name: Windows‑x64 build
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4          # workspace
 
-    # 1 – MSYS2 with GCC, OpenCL, yasm/nasm.  (No Clang!)
+    # 1 – MSYS2 with GCC + OpenCL
     - name: Install MSYS2 toolchain
       uses: msys2/setup-msys2@v2
       with:
@@ -20,13 +20,13 @@ jobs:
         install: |
           git
           base-devel
-          mingw-w64-x86_64-toolchain     # includes GCC
+          mingw-w64-x86_64-toolchain
           mingw-w64-x86_64-yasm
           mingw-w64-x86_64-nasm
           mingw-w64-x86_64-opencl-headers
           mingw-w64-x86_64-opencl-icd
 
-    # 2 – Build static x264
+    # 2 – build static x264
     - name: Build static x264
       shell: msys2 {0}
       run: |
@@ -38,7 +38,7 @@ jobs:
         make install
         cd ..
 
-    # 3 – Build FFmpeg fork (OpenCL + x264) using GCC, no -Werror
+    # 3 – build FFmpeg fork (OpenCL + x264) using GCC
     - name: Build FFmpeg (GoPro fork)
       shell: msys2 {0}
       run: |
@@ -56,7 +56,7 @@ jobs:
         make -j"$(nproc)"
         cp ffmpeg.exe ffprobe.exe libavfilter/opencl/gopromax_opencl.ptx "$GITHUB_WORKSPACE"
 
-    # 4 – Upload finished binaries
+    # 4 – upload finished binaries
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
