@@ -45,6 +45,7 @@ jobs:
         set -e
         git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
         cd goproMax-ffmpeg-v5
+        git apply https://raw.githubusercontent.com/gmat/goproMax-ffmpeg-v5/master/patches/add_opencl_cal.patch
         ./configure \
           --cc=gcc \
           --target-os=mingw32 --arch=x86_64 \
