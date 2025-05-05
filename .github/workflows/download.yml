@@ -1,18 +1,16 @@
-name: Build GoPro‑MAX FFmpeg – Windows
-
+name: Build GoPro‑MAX FFmpeg (cal‑filter) – Windows
 on:
   workflow_dispatch:
 
 jobs:
-  win-x64:
+  win64:
     runs-on: windows-latest
-    name: Windows‑x64 build
-
     steps:
+    # workspace
     - uses: actions/checkout@v4
 
-    # ---------- MSYS2 toolchain ----------
-    - name: Install MSYS2 toolchain
+    # MSYS2 toolchain + OpenCL
+    - name: MSYS2 setup
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
@@ -26,26 +24,25 @@ jobs:
           mingw-w64-x86_64-opencl-headers
           mingw-w64-x86_64-opencl-icd
 
-    # ---------- build static x264 ----------
-    - name: Build static x264
+    # build static x264
+    - name: Build x264 (static)
       shell: msys2 {0}
       run: |
         set -e
         git clone --depth 1 https://code.videolan.org/videolan/x264.git
         cd x264
         ./configure --enable-static --disable-opencl --prefix=/mingw64
-        make -j$(nproc)           # ← quotes removed
+        make -j$(nproc)
         make install
-        cd ..
 
-    # ---------- build FFmpeg ----------
-    - name: Build FFmpeg (GoPro fork)
+    # build FFmpeg fork – opencl‑cal branch
+    - name: Build FFmpeg with gopromax_opencl_cal
       shell: msys2 {0}
       run: |
         set -e
-        git clone --depth 1 https://github.com/gmat/goproMax-ffmpeg-v5.git
+        git clone https://github.com/gmat/goproMax-ffmpeg-v5.git
         cd goproMax-ffmpeg-v5
-        git apply https://raw.githubusercontent.com/gmat/goproMax-ffmpeg-v5/master/patches/add_opencl_cal.patch
+        git checkout opencl-cal
         ./configure \
           --cc=gcc \
           --target-os=mingw32 --arch=x86_64 \
@@ -53,43 +50,29 @@ jobs:
           --enable-gpl --enable-nonfree \
           --enable-opencl \
           --enable-libx264 \
-          --disable-asm \
-          --disable-doc
-        make -j$(nproc)           # ← quotes removed
+          --disable-asm --disable-doc
+        make -j$(nproc)
 
-        # executables
+        # binaries
         cp ffmpeg.exe ffprobe.exe "$GITHUB_WORKSPACE"
 
         # runtime DLLs
-        cp /mingw64/bin/libbz2-1.dll        "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/liblzma-5.dll       "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/libiconv-2.dll      "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/libwinpthread-1.dll "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/libgcc_s_seh-1.dll  "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/libstdc++-6.dll     "$GITHUB_WORKSPACE"
-        cp /mingw64/bin/zlib1.dll           "$GITHUB_WORKSPACE"
-
-        # OpenCL loader (name varies by repo version)
+        for D in libbz2-1 liblzma-5 libiconv-2 libwinpthread-1 \
+                 libgcc_s_seh-1 libstdc++-6 zlib1; do
+            cp /mingw64/bin/$D.dll "$GITHUB_WORKSPACE"
+        done
         if [ -f /mingw64/bin/OpenCL.dll ]; then
             cp /mingw64/bin/OpenCL.dll "$GITHUB_WORKSPACE"
-        elif [ -f /mingw64/bin/libOpenCL.dll ]; then
+        else
             cp /mingw64/bin/libOpenCL.dll "$GITHUB_WORKSPACE"
         fi
 
-    # ---------- upload everything ----------
+    # upload
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: gopro-max-ffmpeg-windows
+        name: gopro-max-ffmpeg-cal-win
         path: |
           ffmpeg.exe
           ffprobe.exe
-          libbz2-1.dll
-          liblzma-5.dll
-          libiconv-2.dll
-          libwinpthread-1.dll
-          libgcc_s_seh-1.dll
-          libstdc++-6.dll
-          zlib1.dll
-          OpenCL.dll?
-          libOpenCL.dll?
+          *.dll
