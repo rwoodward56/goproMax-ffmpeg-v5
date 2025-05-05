@@ -1,4 +1,4 @@
-name: Build GoPro‑MAX FFmpeg (with _cal filter) – Windows
+name: Build GoPro‑MAX FFmpeg (cal filter) – Windows
 on:
   workflow_dispatch:
 
@@ -6,129 +6,84 @@ jobs:
   win64:
     runs-on: windows-latest
     steps:
-    # workspace (repo may be empty)
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    # ---------- MSYS2 toolchain ----------
-    - name: MSYS2 setup
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: MINGW64
-        update: true
-        install: |
-          git
-          base-devel
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-yasm
-          mingw-w64-x86_64-nasm
-          mingw-w64-x86_64-opencl-headers
-          mingw-w64-x86_64-opencl-icd
+      # 1 – MSYS2 toolchain
+      - name: MSYS2 setup
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: |
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-yasm
+            mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-opencl-headers
+            mingw-w64-x86_64-opencl-icd
 
-    # ---------- build static x264 ----------
-    - name: Build x264
-      shell: msys2 {0}
-      run: |
-        set -e
-        git clone --depth 1 https://code.videolan.org/videolan/x264.git
-        cd x264
-        ./configure --enable-static --disable-opencl --prefix=/mingw64
-        make -j$(nproc)
-        make install
+      # 2 – static x264
+      - name: Build x264
+        shell: msys2 {0}
+        run: |
+            set -e
+            git clone --depth 1 https://code.videolan.org/videolan/x264.git
+            cd x264
+            ./configure --enable-static --disable-opencl --prefix=/mingw64
+            make -j$(nproc)
+            make install
 
-    # ---------- clone fork + inject _cal patch ----------
-    - name: Patch and build FFmpeg
-      shell: msys2 {0}
-      run: |
-        set -e
-        git clone https://github.com/gmat/goproMax-ffmpeg-v5.git
-        cd goproMax-ffmpeg-v5
+      # 3 – patch + build FFmpeg
+      - name: Patch & build FFmpeg
+        shell: msys2 {0}
+        run: |
+            set -e
+            git clone https://github.com/gmat/goproMax-ffmpeg-v5.git
+            cd goproMax-ffmpeg-v5
 
-        # ----- inline patch adds gopromax_opencl_cal -----
-        cat > cal.patch <<'EOF'
-diff --git a/libavfilter/vf_gopromax_opencl.c b/libavfilter/vf_gopromax_opencl.c
-@@
--static const AVFilterPad gopromax_opencl_inputs[] = {
-+/* cal‑aware version accepts pitch/yaw/roll options and
-+   applies them in the same OpenCL kernel so no 2nd pass is needed */
-+typedef struct CalOptions {
-+    float yaw;
-+    float pitch;
-+    float roll;
-+} CalOptions;
-+
-+static int cal_init(AVFilterContext *ctx)
-+{
-+    CalOptions *o = ctx->priv;
-+    GoproMaxOCContext *s = ctx->priv;
-+    s->yaw   = o->yaw   * M_PI/180.0;
-+    s->pitch = o->pitch * M_PI/180.0;
-+    s->roll  = o->roll  * M_PI/180.0;
-+    return gopromax_opencl_init(ctx);
-+}
-+
-+static const AVOption cal_opts[] = {
-+    { "yaw",   "yaw in deg",   OFFSET(yaw),   AV_OPT_TYPE_FLOAT, { .dbl = 0 }, -180, 180, VF },
-+    { "pitch", "pitch in deg", OFFSET(pitch), AV_OPT_TYPE_FLOAT, { .dbl = 0 }, -180, 180, VF },
-+    { "roll",  "roll in deg",  OFFSET(roll),  AV_OPT_TYPE_FLOAT, { .dbl = 0 }, -180, 180, VF },
-+    { NULL }
-+};
-+
-+#define CALFLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
-+static const AVClass cal_class = {
-+    .class_name = "gopromax_opencl_cal",
-+    .item_name  = av_default_item_name,
-+    .option     = cal_opts,
-+    .version    = LIBAVUTIL_VERSION_INT,
-+};
-+
-+static const AVFilterPad gopromax_opencl_inputs[] = {
-@@
--static const AVFilter ff_vf_gopromax_opencl = {
-+static const AVFilter ff_vf_gopromax_opencl_cal = {
-     .name          = "gopromax_opencl_cal",
--    .init          = gopromax_opencl_init,
-+    .init          = cal_init,
-     .uninit        = gopromax_opencl_uninit,
-     .priv_size     = sizeof(GoproMaxOCContext),
-     .query_formats = gopromax_opencl_query_formats,
-@@
--    .priv_class    = &gopromax_opencl_class,
-+    .priv_class    = &cal_class,
-     .flags         = AVFILTER_FLAG_HWDEVICE,
- };
-EOF
-        patch -p1 < cal.patch
+            # ------- inject minimal _cal alias so we can call it -------
+            cat <<'PATCH' > alias.patch
+            diff --git a/libavfilter/allfilters.c b/libavfilter/allfilters.c
+            @@
+             extern const AVFilter ff_vf_gopromax_opencl;
+            +extern const AVFilter ff_vf_gopromax_opencl; /* alias */
 
-        ./configure \
-          --cc=gcc \
-          --target-os=mingw32 --arch=x86_64 \
-          --enable-cross-compile \
-          --enable-gpl --enable-nonfree \
-          --enable-opencl \
-          --enable-libx264 \
-          --disable-asm --disable-doc
-        make -j$(nproc)
+            @@
+             REGISTER_FILTER(GOPROMAX_OPENCL , gopromax_opencl , vf);
+            +REGISTER_FILTER(GOPROMAX_OPENCL_CAL , gopromax_opencl , vf);
+            PATCH
+            patch -p1 < alias.patch
 
-        # copy binaries
-        cp ffmpeg.exe ffprobe.exe "$GITHUB_WORKSPACE"
+            ./configure \
+              --cc=gcc \
+              --target-os=mingw32 --arch=x86_64 \
+              --enable-cross-compile \
+              --enable-gpl --enable-nonfree \
+              --enable-opencl \
+              --enable-libx264 \
+              --disable-asm --disable-doc
+            make -j$(nproc)
 
-        # copy DLLs
-        for D in libbz2-1 liblzma-5 libiconv-2 libwinpthread-1 \
-                 libgcc_s_seh-1 libstdc++-6 zlib1; do
-            cp /mingw64/bin/$D.dll "$GITHUB_WORKSPACE"
-        done
-        if [ -f /mingw64/bin/OpenCL.dll ]; then
-            cp /mingw64/bin/OpenCL.dll "$GITHUB_WORKSPACE"
-        else
-            cp /mingw64/bin/libOpenCL.dll "$GITHUB_WORKSPACE"
-        fi
+            # binaries
+            cp ffmpeg.exe ffprobe.exe "$GITHUB_WORKSPACE"
 
-    # ---------- upload ----------
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: ffmpeg-cal-win
-        path: |
-          ffmpeg.exe
-          ffprobe.exe
-          *.dll
+            # DLLs
+            for D in libbz2-1 liblzma-5 libiconv-2 libwinpthread-1 \
+                     libgcc_s_seh-1 libstdc++-6 zlib1; do
+                cp /mingw64/bin/$D.dll "$GITHUB_WORKSPACE"
+            done
+            if [ -f /mingw64/bin/OpenCL.dll ]; then
+                cp /mingw64/bin/OpenCL.dll "$GITHUB_WORKSPACE"
+            else
+                cp /mingw64/bin/libOpenCL.dll "$GITHUB_WORKSPACE"
+            fi
+
+      # 4 – upload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-cal-win
+          path: |
+            ffmpeg.exe
+            ffprobe.exe
+            *.dll
